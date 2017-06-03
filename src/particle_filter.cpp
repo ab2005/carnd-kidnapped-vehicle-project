@@ -14,13 +14,12 @@
 std::default_random_engine random_generator;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
-    // TODO: Set the number of particles. Initialize all particles to first position (based on estimates of
+    // DONE: Set the number of particles. Initialize all particles to first position (based on estimates of
     //   x, y, theta and their uncertainties from GPS) and all weights to 1.
     // Add random Gaussian noise to each particle.
     // NOTE: Consult particle_filter.h for more information about this method (and others in this file).
     
-    // Normal distributions centered in the initial GPS estimates
-    // using the GPS uncertainties as deviations.
+    // Normal distributions.
     std::normal_distribution<double> dist_x(x, std[0]);
     std::normal_distribution<double> dist_y(y, std[1]);
     std::normal_distribution<double> dist_yaw(theta, std[2]);
@@ -55,37 +54,29 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
     //  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
     //  http://www.cplusplus.com/reference/random/default_random_engine/
     
-    // Handle the case without no movement
-    if (fabs(velocity) > 1E-3){
-        // Predict the state for the next time step using the bicycle model
-        if (fabs(yaw_rate) < 1E-6) {
-            // move with constant heading
-            for(auto & particle : particles) {
-                particle.x += velocity * delta_t * cos(particle.theta);
-                particle.y += velocity * delta_t * sin(particle.theta);
-            }
-        } else {
-            // move changing heading
-            for(auto & particle : particles) {
+    // Predict the state for the next time step using the bicycle model
+    if (fabs(velocity) > 1E-3) { // Handle the case without no movement
+        if (fabs(yaw_rate) < 1E-6) for(auto & p : particles) {
+                p.x += velocity * delta_t * cos(p.theta);
+                p.y += velocity * delta_t * sin(p.theta);
+        } else for(auto & p : particles) {
                 const double
-                theta_0 = particle.theta,
+                theta_0 = p.theta,
                 theta_t = theta_0 + yaw_rate * delta_t;
-                particle.x += velocity / yaw_rate * (sin(theta_t) - sin(theta_0));
-                particle.y -= velocity / yaw_rate * (cos(theta_t) - cos(theta_0));
-                particle.theta += yaw_rate * delta_t;
-            }
+                p.x += velocity / yaw_rate * (sin(theta_t) - sin(theta_0));
+                p.y -= velocity / yaw_rate * (cos(theta_t) - cos(theta_0));
+                p.theta += yaw_rate * delta_t;
         }
     }
     
-    // Add noise in any case
-    std::normal_distribution<double> noise_x(0, std_pos[0]);
-    std::normal_distribution<double> noise_y(0, std_pos[1]);
-    std::normal_distribution<double> noise_yaw(0, std_pos[2]);
-    
-    for(auto & particle : particles) {
-        particle.x += noise_x(random_generator);
-        particle.y += noise_y(random_generator);
-        particle.theta += noise_yaw(random_generator);
+    // Add noise.
+    std::normal_distribution<double> noiseX(0, std_pos[0]);
+    std::normal_distribution<double> noiseY(0, std_pos[1]);
+    std::normal_distribution<double> noiseYaw(0, std_pos[2]);
+    for(auto & p : particles) {
+        p.x += noiseX(random_generator);
+        p.y += noiseY(random_generator);
+        p.theta += noiseYaw(random_generator);
     }
 }
 
@@ -110,8 +101,7 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
     }
 }
 
-void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
-                                   std::vector<LandmarkObs> observations, Map map_landmarks) {
+void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], std::vector<LandmarkObs> observations, Map map_landmarks) {
     // DONE: Update the weights of each particle using a mult-variate Gaussian distribution. You can read
     //   more about this distribution here: https://en.wikipedia.org/wiki/Multivariate_normal_distribution
     // NOTE: The observations are given in the VEHICLE'S coordinate system. Your particles are located
@@ -132,9 +122,8 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
     
     for (auto & p : particles) {
         // Precompute trigonometry
-        const double
-        cos_theta = cos(p.theta),
-        sin_theta = sin(p.theta);
+        const double cos_theta = cos(p.theta);
+        const double sin_theta = sin(p.theta);
         
         // Transform observations to the frame reference in the particle
         for (int i = 0; i < observations.size(); ++i) {
@@ -143,13 +132,13 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
             predicted[i].y = p.y + obs.x * sin_theta + obs.y * cos_theta;
         }
         
-        // Reset the container
+        // Empty the container
         p_landmarks.clear();
         
         // Filter landmarks inside the sensor range
-        for (const auto & landmark : map_landmarks.landmark_list) {
-            if (dist(landmark.x_f, landmark.y_f, p.x, p.y) <= sensor_range) {
-                p_landmarks.push_back({landmark.id_i, (double)landmark.x_f, (double)landmark.y_f});
+        for (const auto & lm : map_landmarks.landmark_list) {
+            if (dist(lm.x_f, lm.y_f, p.x, p.y) <= sensor_range) {
+                p_landmarks.push_back({lm.id_i, (double)lm.x_f, (double)lm.y_f});
             }
         }
         
